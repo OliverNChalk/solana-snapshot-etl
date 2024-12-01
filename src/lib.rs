@@ -63,7 +63,7 @@ pub fn append_vec_iter(append_vec: &AppendVec) -> impl Iterator<Item = StoredAcc
         })
     })
     .take_while(|account| account.is_some())
-    .filter_map(|account| account)
+    .flatten()
 }
 
 pub struct StoredAccountMetaHandle<'a> {

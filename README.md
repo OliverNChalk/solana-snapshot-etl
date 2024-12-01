@@ -41,7 +41,6 @@ Usage: solana-snapshot-etl --source <SOURCE> <COMMAND>
 
 Commands:
   noop   Load accounts and do nothing
-  kafka  Filter accounts with gRPC plugin filter and send them to Kafka
   help   Print this message or the help of the given subcommand(s)
 
 Options:
@@ -78,12 +77,3 @@ solana-snapshot-etl 'https://my-solana-node.bdnodes.net/snapshot.tar.zst?auth=xx
 #### noop
 
 Do nothing, only load snapshot, parse accounts.
-
-#### kafka
-
-```shell
-solana-snapshot-etl --source /path/to/snapshot-*.tar.zst kafka --config kafka-config.json
-```
-
-Load snapshot, parse account, filter with [Solana Geyser gRPC Plugin](https://github.com/rpcpool/yellowstone-grpc)
-filter and send filtered accounts to Kafka.
