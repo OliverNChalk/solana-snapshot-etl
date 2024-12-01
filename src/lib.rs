@@ -12,7 +12,6 @@ use {
 
 pub mod append_vec;
 pub mod archived;
-pub mod parallel;
 pub mod solana;
 pub mod unpacked;
 
@@ -72,7 +71,7 @@ pub struct StoredAccountMetaHandle<'a> {
 }
 
 impl<'a> StoredAccountMetaHandle<'a> {
-    pub const fn new(append_vec: &'a AppendVec, offset: usize) -> StoredAccountMetaHandle {
+    pub const fn new(append_vec: &'a AppendVec, offset: usize) -> StoredAccountMetaHandle<'a> {
         Self { append_vec, offset }
     }
 
@@ -88,17 +87,4 @@ pub trait ReadProgressTracking {
         rd: Box<dyn Read>,
         file_len: u64,
     ) -> SnapshotResult<Box<dyn Read>>;
-}
-
-struct NoopReadProgressTracking {}
-
-impl ReadProgressTracking for NoopReadProgressTracking {
-    fn new_read_progress_tracker(
-        &self,
-        _path: &Path,
-        rd: Box<dyn Read>,
-        _file_len: u64,
-    ) -> SnapshotResult<Box<dyn Read>> {
-        Ok(rd)
-    }
 }

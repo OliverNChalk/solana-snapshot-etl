@@ -4,7 +4,6 @@ use {
         DeserializableVersionedBank, SerializableAccountStorageEntry, SnapshotError,
         SnapshotExtractor, SnapshotResult,
     },
-    log::info,
     std::{
         fs::File,
         io::{BufReader, Read},
@@ -13,6 +12,7 @@ use {
         time::Instant,
     },
     tar::{Archive, Entries, Entry},
+    tracing::info,
 };
 
 /// Extracts account data from a .tar.zst stream.

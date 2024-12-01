@@ -5,7 +5,6 @@ use {
         SnapshotError, SnapshotExtractor, SnapshotResult, SNAPSHOTS_DIR,
     },
     itertools::Itertools,
-    log::info,
     solana_runtime::snapshot_utils::SNAPSHOT_STATUS_CACHE_FILENAME,
     std::{
         fs::OpenOptions,
@@ -14,6 +13,7 @@ use {
         str::FromStr,
         time::Instant,
     },
+    tracing::info,
 };
 
 /// Extracts account data from snapshots that were unarchived to a file system.

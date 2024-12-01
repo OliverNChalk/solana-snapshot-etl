@@ -16,7 +16,6 @@
 // Source: solana/runtime/src/append_vec.rs
 
 use {
-    log::*,
     memmap2::{Mmap, MmapMut},
     solana_runtime::{
         account_storage::meta::{AccountMeta, StoredMeta},
@@ -35,6 +34,7 @@ use {
         mem,
         path::Path,
     },
+    tracing::info,
 };
 
 /// References to account data stored elsewhere. Getting an `Account` requires cloning
@@ -50,7 +50,7 @@ pub struct StoredAccountMeta<'a> {
     pub hash: &'a Hash,
 }
 
-impl<'a> StoredAccountMeta<'a> {
+impl StoredAccountMeta<'_> {
     /// Return a new Account by copying all the data referenced by the `StoredAccountMeta`.
     pub fn clone_account(&self) -> AccountSharedData {
         AccountSharedData::from(Account {

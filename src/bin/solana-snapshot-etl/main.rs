@@ -1,23 +1,22 @@
 use {
     clap::{Parser, Subcommand},
-    indicatif::{ProgressBar, ProgressBarIter, ProgressDrawTarget, ProgressStyle},
-    log::info,
+    indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle},
     reqwest::blocking::Response,
+    rpc::HistoricalRpc,
+    solana_sdk::pubkey::Pubkey,
     solana_snapshot_etl::{
-        append_vec::AppendVec,
-        append_vec_iter,
-        archived::ArchiveSnapshotExtractor,
-        parallel::{par_iter_append_vecs, AppendVecConsumer},
-        unpacked::UnpackedSnapshotExtractor,
-        AppendVecIterator, ReadProgressTracking, SnapshotError, SnapshotExtractor, SnapshotResult,
+        archived::ArchiveSnapshotExtractor, unpacked::UnpackedSnapshotExtractor, AppendVecIterator,
+        ReadProgressTracking, SnapshotError, SnapshotExtractor, SnapshotResult,
     },
     std::{
         fs::File,
         io::{IoSliceMut, Read},
         path::Path,
-        sync::Arc,
     },
+    tracing::info,
 };
+
+mod rpc;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -37,37 +36,55 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Action {
-    /// Load accounts and do nothing
-    Noop,
+    /// Index all accounts and serve an RPC.
+    Rpc,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
-    );
+fn main() {
+    let _ = toolbox::tracing::setup_tracing("solana-snapshot-etl", None);
 
     let args = Args::parse();
-    let num_threads = args.num_threads.unwrap_or_else(num_cpus::get);
 
-    let mut loader = SupportedLoader::new(&args.source, Box::new(LoadProgressTracking {}))?;
-    let bar = Arc::new(create_accounts_progress_bar()?);
+    let loader = SupportedLoader::new(&args.source, Box::new(LoadProgressTracking {})).unwrap();
+
+    // Setup a multi progress bar & style.
+    let multi = MultiProgress::new();
+    let style = ProgressStyle::with_template("{prefix:>15.bold.dim} {spinner:.green} rate={per_sec} processed={human_pos} {elapsed_precise:.cyan}").unwrap();
+
+    // Setup accounts processed bar.
+    let accounts_bar = multi.add(ProgressBar::new_spinner());
+    accounts_bar.set_prefix("accounts");
+    accounts_bar.set_style(style.clone());
+
+    // Setup unique accounts processed bar.
+    let unique_accounts_bar = multi.add(ProgressBar::new_spinner());
+    unique_accounts_bar.set_prefix("unique accounts");
+    unique_accounts_bar.set_style(style);
+
     match args.action {
-        Action::Noop => {
-            par_iter_append_vecs(
-                loader.iter(),
-                || NoopConsumer {
-                    bar: Arc::clone(&bar),
-                },
-                num_threads,
-            )
-            .await?;
+        Action::Rpc => {
+            // Construct the account index.
+            let rpc = HistoricalRpc::load(loader, &accounts_bar, &unique_accounts_bar);
+
+            info!(keys = rpc.account_index.len(), "Accounts index constructed");
+            accounts_bar.finish();
+            unique_accounts_bar.finish();
+
+            // Request input from user for which historical account to lookup.
+            let mut request_buf = String::new();
+            loop {
+                print!("Please enter the account you want to load: ");
+                std::io::stdin().read_line(&mut request_buf).unwrap();
+                match request_buf.parse::<Pubkey>() {
+                    Ok(key) => match rpc.account_index.get(&key) {
+                        Some(slot) => println!("FOUND: {slot}"),
+                        None => println!("MISSING"),
+                    },
+                    Err(err) => println!("INVALID KEY: err={err}"),
+                }
+            }
         }
     }
-    bar.finish();
-    info!("Done!");
-
-    Ok(())
 }
 
 struct LoadProgressTracking {}
@@ -81,7 +98,7 @@ impl ReadProgressTracking for LoadProgressTracking {
     ) -> SnapshotResult<Box<dyn Read>> {
         let progress_bar = ProgressBar::new(file_len).with_style(
             ProgressStyle::with_template(
-                "{prefix:>10.bold.dim} {spinner:.green} [{bar:.cyan/blue}] {bytes}/{total_bytes} ({percent}%)",
+                "{prefix:>15.bold.dim} {spinner:.green} [{bar:.cyan/blue}] {bytes}/{total_bytes} ({percent}%)",
             )
             .map_err(|error| SnapshotError::ReadProgressTracking(error.to_string()))?
             .progress_chars("#>-"),
@@ -166,25 +183,5 @@ impl SnapshotExtractor for SupportedLoader {
             SupportedLoader::ArchiveFile(loader) => Box::new(loader.iter()),
             SupportedLoader::ArchiveDownload(loader) => Box::new(loader.iter()),
         }
-    }
-}
-
-fn create_accounts_progress_bar() -> anyhow::Result<ProgressBar> {
-    let tmpl = ProgressStyle::with_template("{prefix:>10.bold.dim} {spinner:.green} rate={per_sec} processed={human_pos} {elapsed_precise:.cyan}")?;
-    let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr()).with_style(tmpl);
-    bar.set_prefix("accounts");
-    Ok(bar)
-}
-
-struct NoopConsumer {
-    bar: Arc<ProgressBar>,
-}
-
-#[async_trait::async_trait]
-impl AppendVecConsumer for NoopConsumer {
-    async fn on_append_vec(&mut self, append_vec: AppendVec) -> anyhow::Result<()> {
-        let count = append_vec_iter(&append_vec).count();
-        self.bar.inc(count as u64);
-        Ok(())
     }
 }
