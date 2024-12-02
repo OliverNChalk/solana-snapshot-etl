@@ -15,69 +15,62 @@
 // This file contains code vendored from https://github.com/solana-labs/solana
 // Source: solana/runtime/src/append_vec.rs
 
-use {
-    memmap2::{Mmap, MmapMut},
-    solana_runtime::{
-        account_storage::meta::{AccountMeta, StoredMeta},
-        accounts_file::ALIGN_BOUNDARY_OFFSET,
-        append_vec::MAXIMUM_APPEND_VEC_FILE_SIZE,
-        u64_align,
-    },
-    solana_sdk::{
-        account::{Account, AccountSharedData},
-        hash::Hash,
-    },
-    std::{
-        convert::TryFrom,
-        fs::OpenOptions,
-        io::{self, Read},
-        mem,
-        path::Path,
-    },
-    tracing::info,
-};
+use std::convert::TryFrom;
+use std::fs::OpenOptions;
+use std::path::Path;
+use std::{io, mem};
 
-/// References to account data stored elsewhere. Getting an `Account` requires cloning
-/// (see `StoredAccountMeta::clone_account()`).
+use memmap2::Mmap;
+use solana_accounts_db::account_storage::meta::{AccountMeta, StoredMeta};
+use solana_accounts_db::accounts_file::ALIGN_BOUNDARY_OFFSET;
+use solana_accounts_db::append_vec::MAXIMUM_APPEND_VEC_FILE_SIZE;
+use solana_accounts_db::u64_align;
+use solana_sdk::account::Account;
+use solana_sdk::hash::Hash;
+use tracing::info;
+
+/// References to account data stored elsewhere. Getting an `Account` requires
+/// cloning (see `StoredAccountMeta::clone_account()`).
 #[derive(PartialEq, Eq, Debug)]
-pub struct StoredAccountMeta<'a> {
-    pub meta: &'a StoredMeta,
+pub(crate) struct StoredAccountMeta<'a> {
+    pub(crate) meta: &'a StoredMeta,
     /// account data
-    pub account_meta: &'a AccountMeta,
-    pub data: &'a [u8],
-    pub offset: usize,
-    pub stored_size: usize,
-    pub hash: &'a Hash,
+    pub(crate) account_meta: &'a AccountMeta,
+    pub(crate) data: &'a [u8],
+    pub(crate) offset: usize,
+    pub(crate) stored_size: usize,
+    pub(crate) hash: &'a Hash,
 }
 
 impl StoredAccountMeta<'_> {
-    /// Return a new Account by copying all the data referenced by the `StoredAccountMeta`.
-    pub fn clone_account(&self) -> AccountSharedData {
-        AccountSharedData::from(Account {
+    /// Return a new Account by copying all the data referenced by the
+    /// `StoredAccountMeta`.
+    pub(crate) fn clone_account(&self) -> Account {
+        Account {
             lamports: self.account_meta.lamports,
             owner: self.account_meta.owner,
             executable: self.account_meta.executable,
             rent_epoch: self.account_meta.rent_epoch,
             data: self.data.to_vec(),
-        })
+        }
     }
 }
 
-/// A thread-safe, file-backed block of memory used to store `Account` instances. Append operations
-/// are serialized such that only one thread updates the internal `append_lock` at a time. No
-/// restrictions are placed on reading. That is, one may read items from one thread while another
+/// A thread-safe, file-backed block of memory used to store `Account`
+/// instances. Append operations are serialized such that only one thread
+/// updates the internal `append_lock` at a time. No restrictions are placed on
+/// reading. That is, one may read items from one thread while another
 /// is appending new items.
-pub struct AppendVec {
-    /// A file-backed block of memory that is used to store the data for each appended item.
+pub(crate) struct AppendVec {
+    /// A file-backed block of memory that is used to store the data for each
+    /// appended item.
     map: Mmap,
 
     /// The number of bytes used to store items, not the number of items.
     current_len: usize,
 
-    /// The number of bytes available for storing items.
-    file_size: u64,
-
     slot: u64,
+    id: u64,
 }
 
 impl AppendVec {
@@ -105,27 +98,15 @@ impl AppendVec {
         }
     }
 
-    /// how many more bytes can be stored in this append vec
-    pub const fn remaining_bytes(&self) -> u64 {
-        (self.capacity()).saturating_sub(self.len() as u64)
-    }
-
-    pub const fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.current_len
     }
 
-    pub const fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub const fn capacity(&self) -> u64 {
-        self.file_size
-    }
-
-    pub fn new_from_file<P: AsRef<Path>>(
+    pub(crate) fn new_from_file<P: AsRef<Path>>(
         path: P,
         current_len: usize,
         slot: u64,
+        id: u64,
     ) -> io::Result<Self> {
         let data = OpenOptions::new()
             .read(true)
@@ -139,35 +120,20 @@ impl AppendVec {
         let map = unsafe {
             let result = Mmap::map(&data);
             if result.is_err() {
-                // for vm.max_map_count, error is: {code: 12, kind: Other, message: "Cannot allocate memory"}
-                info!("memory map error: {:?}. This may be because vm.max_map_count is not set correctly.", result);
+                // for vm.max_map_count, error is: {code: 12, kind: Other, message: "Cannot
+                // allocate memory"}
+                info!(
+                    "memory map error: {:?}. This may be because vm.max_map_count is not set \
+                     correctly.",
+                    result
+                );
             }
             result?
         };
 
-        let new = AppendVec {
-            map,
-            current_len,
-            file_size,
-            slot,
-        };
+        let new = AppendVec { map, current_len, slot, id };
 
         Ok(new)
-    }
-
-    pub fn new_from_reader<R: Read>(
-        reader: &mut R,
-        current_len: usize,
-        slot: u64,
-    ) -> io::Result<Self> {
-        let mut map = MmapMut::map_anon(current_len)?;
-        io::copy(&mut reader.take(current_len as u64), &mut map.as_mut())?;
-        Ok(AppendVec {
-            map: map.make_read_only()?,
-            current_len,
-            file_size: current_len as u64,
-            slot,
-        })
     }
 
     /// Get a reference to the data at `offset` of `size` bytes if that slice
@@ -190,40 +156,40 @@ impl AppendVec {
         ))
     }
 
-    /// Return a reference to the type at `offset` if its data doesn't overrun the internal buffer.
-    /// Otherwise return None. Also return the offset of the first byte after the requested data
-    /// that falls on a 64-byte boundary.
+    /// Return a reference to the type at `offset` if its data doesn't overrun
+    /// the internal buffer. Otherwise return None. Also return the offset
+    /// of the first byte after the requested data that falls on a 64-byte
+    /// boundary.
     fn get_type<'a, T>(&self, offset: usize) -> Option<(&'a T, usize)> {
         let (data, next) = self.get_slice(offset, mem::size_of::<T>())?;
         let ptr: *const T = data.as_ptr() as *const T;
-        //UNSAFE: The cast is safe because the slice is aligned and fits into the memory
-        //and the lifetime of the &T is tied to self, which holds the underlying memory map
+        //UNSAFE: The cast is safe because the slice is aligned and fits into the
+        // memory and the lifetime of the &T is tied to self, which holds the
+        // underlying memory map
         Some((unsafe { &*ptr }, next))
     }
 
-    /// Return account metadata for the account at `offset` if its data doesn't overrun
-    /// the internal buffer. Otherwise return None. Also return the offset of the first byte
-    /// after the requested data that falls on a 64-byte boundary.
-    pub fn get_account<'a>(&'a self, offset: usize) -> Option<(StoredAccountMeta<'a>, usize)> {
+    /// Return account metadata for the account at `offset` if its data doesn't
+    /// overrun the internal buffer. Otherwise return None. Also return the
+    /// offset of the first byte after the requested data that falls on a
+    /// 64-byte boundary.
+    pub(crate) fn get_account<'a>(
+        &'a self,
+        offset: usize,
+    ) -> Option<(StoredAccountMeta<'a>, usize)> {
         let (meta, next): (&'a StoredMeta, _) = self.get_type(offset)?;
         let (account_meta, next): (&'a AccountMeta, _) = self.get_type(next)?;
         let (hash, next): (&'a Hash, _) = self.get_type(next)?;
         let (data, next) = self.get_slice(next, meta.data_len as usize)?;
         let stored_size = next - offset;
-        Some((
-            StoredAccountMeta {
-                meta,
-                account_meta,
-                data,
-                offset,
-                stored_size,
-                hash,
-            },
-            next,
-        ))
+        Some((StoredAccountMeta { meta, account_meta, data, offset, stored_size, hash }, next))
     }
 
-    pub const fn slot(&self) -> u64 {
+    pub(crate) const fn slot(&self) -> u64 {
         self.slot
+    }
+
+    pub(crate) const fn id(&self) -> u64 {
+        self.id
     }
 }
