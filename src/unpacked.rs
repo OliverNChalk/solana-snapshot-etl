@@ -42,6 +42,7 @@ impl UnpackedSnapshotExtractor {
         let snapshot_files = snapshots_dir.read_dir()?;
 
         let snapshot_file_path = snapshot_files
+            .take(10)
             .filter_map(|entry| entry.ok())
             .find(|entry| u64::from_str(&entry.file_name().to_string_lossy()).is_ok())
             .map(|entry| entry.path().join(entry.file_name()))
@@ -83,6 +84,10 @@ impl UnpackedSnapshotExtractor {
         })
     }
 
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     pub fn unboxed_iter(&self) -> impl Iterator<Item = SnapshotResult<AppendVec>> + '_ {
         std::iter::once(self.iter_streams())
             .flatten_ok()
@@ -91,19 +96,18 @@ impl UnpackedSnapshotExtractor {
 
     fn iter_streams(&self) -> SnapshotResult<impl Iterator<Item = SnapshotResult<AppendVec>> + '_> {
         let accounts_dir = self.root.join("accounts");
-        Ok(accounts_dir
-            .read_dir()?
-            .filter_map(|f| f.ok())
-            .filter_map(|f| {
-                let name = f.file_name();
-                parse_append_vec_name(&f.file_name()).map(move |parsed| (parsed, name))
-            })
-            .map(move |((slot, version), name)| {
-                self.open_append_vec(slot, version, &accounts_dir.join(name))
-            }))
+        Ok(accounts_dir.read_dir().unwrap().map(move |file| {
+            let file = file.unwrap();
+            let name = file.file_name();
+
+            let (slot, version) = parse_append_vec_name(&name).unwrap();
+            Ok(self
+                .open_append_vec(slot, version, &accounts_dir.join(&name))
+                .unwrap())
+        }))
     }
 
-    fn open_append_vec(&self, slot: u64, id: u64, path: &Path) -> SnapshotResult<AppendVec> {
+    pub fn open_append_vec(&self, slot: u64, id: u64, path: &Path) -> SnapshotResult<AppendVec> {
         let known_vecs = self
             .accounts_db_fields
             .0
@@ -120,6 +124,7 @@ impl UnpackedSnapshotExtractor {
             path,
             known_vec.accounts_current_len,
             slot,
+            id,
         )?)
     }
 }

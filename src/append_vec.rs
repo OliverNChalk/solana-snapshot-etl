@@ -78,6 +78,7 @@ pub struct AppendVec {
     file_size: u64,
 
     slot: u64,
+    id: u64,
 }
 
 impl AppendVec {
@@ -126,6 +127,7 @@ impl AppendVec {
         path: P,
         current_len: usize,
         slot: u64,
+        id: u64,
     ) -> io::Result<Self> {
         let data = OpenOptions::new()
             .read(true)
@@ -150,6 +152,7 @@ impl AppendVec {
             current_len,
             file_size,
             slot,
+            id,
         };
 
         Ok(new)
@@ -159,6 +162,7 @@ impl AppendVec {
         reader: &mut R,
         current_len: usize,
         slot: u64,
+        id: u64,
     ) -> io::Result<Self> {
         let mut map = MmapMut::map_anon(current_len)?;
         io::copy(&mut reader.take(current_len as u64), &mut map.as_mut())?;
@@ -167,6 +171,7 @@ impl AppendVec {
             current_len,
             file_size: current_len as u64,
             slot,
+            id,
         })
     }
 
@@ -225,5 +230,9 @@ impl AppendVec {
 
     pub const fn slot(&self) -> u64 {
         self.slot
+    }
+
+    pub const fn id(&self) -> u64 {
+        self.id
     }
 }

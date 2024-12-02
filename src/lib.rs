@@ -48,7 +48,10 @@ fn parse_append_vec_name(name: &OsStr) -> Option<(u64, u64)> {
     let id = u64::from_str(parts.next().unwrap_or(""));
     match (slot, id) {
         (Ok(slot), Ok(version)) => Some((slot, version)),
-        _ => None,
+        _ => {
+            println!("PARSE FAIL: {name:?}");
+            None
+        }
     }
 }
 

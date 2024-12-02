@@ -1,17 +1,14 @@
 use {
     clap::{Parser, Subcommand},
     indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle},
-    reqwest::blocking::Response,
     rpc::HistoricalRpc,
     solana_sdk::pubkey::Pubkey,
     solana_snapshot_etl::{
-        archived::ArchiveSnapshotExtractor, unpacked::UnpackedSnapshotExtractor, AppendVecIterator,
-        ReadProgressTracking, SnapshotError, SnapshotExtractor, SnapshotResult,
+        unpacked::UnpackedSnapshotExtractor, ReadProgressTracking, SnapshotError, SnapshotResult,
     },
     std::{
-        fs::File,
         io::{IoSliceMut, Read},
-        path::Path,
+        path::{Path, PathBuf},
     },
     tracing::info,
 };
@@ -21,12 +18,11 @@ mod rpc;
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
 struct Args {
-    /// Snapshot source (unpacked snapshot, archive file, or HTTP link)
+    /// Snapshot source (unpacked snapshot).
     #[clap(long)]
-    source: String,
+    source: PathBuf,
 
-    /// Number of threads used to process snapshot,
-    /// by default number of CPUs would be used.
+    /// Number of threads used to process snapshot, by default number of CPUs would be used.
     #[clap(long)]
     num_threads: Option<usize>,
 
@@ -45,7 +41,9 @@ fn main() {
 
     let args = Args::parse();
 
-    let loader = SupportedLoader::new(&args.source, Box::new(LoadProgressTracking {})).unwrap();
+    let loader =
+        UnpackedSnapshotExtractor::open(&args.source, Box::new(LoadProgressTracking {})).unwrap();
+    // SupportedLoader::new(&args.source, Box::new(LoadProgressTracking {})).unwrap();
 
     // Setup a multi progress bar & style.
     let multi = MultiProgress::new();
@@ -73,15 +71,31 @@ fn main() {
             // Request input from user for which historical account to lookup.
             let mut request_buf = String::new();
             loop {
-                print!("Please enter the account you want to load: ");
+                request_buf.clear();
+
+                println!("\nPlease enter the account you want to load: ");
                 std::io::stdin().read_line(&mut request_buf).unwrap();
-                match request_buf.parse::<Pubkey>() {
-                    Ok(key) => match rpc.account_index.get(&key) {
-                        Some(slot) => println!("FOUND: {slot}"),
-                        None => println!("MISSING"),
-                    },
-                    Err(err) => println!("INVALID KEY: err={err}"),
-                }
+
+                // Find account slot.
+                let key = match request_buf.trim().parse::<Pubkey>() {
+                    Ok(key) => key,
+                    Err(err) => {
+                        println!("INVALID KEY: key={request_buf}; err={err}");
+                        continue;
+                    }
+                };
+                let (slot, id) = match rpc.account_index.get(&key) {
+                    Some(slot) => slot,
+                    None => {
+                        println!("MISSING; key={key}");
+                        continue;
+                    }
+                };
+
+                // Lookup the slot.
+                print!("Found; slot={slot}; id={id}; ");
+                let len = rpc.get_account(&key).unwrap();
+                println!("len={len}")
             }
         }
     }
@@ -137,51 +151,5 @@ impl Read for LoadProgressTracker {
 
     fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
         self.rd.read_exact(buf)
-    }
-}
-
-pub enum SupportedLoader {
-    Unpacked(UnpackedSnapshotExtractor),
-    ArchiveFile(ArchiveSnapshotExtractor<File>),
-    ArchiveDownload(ArchiveSnapshotExtractor<Response>),
-}
-
-impl SupportedLoader {
-    fn new(source: &str, progress_tracking: Box<dyn ReadProgressTracking>) -> anyhow::Result<Self> {
-        if source.starts_with("http://") || source.starts_with("https://") {
-            Self::new_download(source)
-        } else {
-            Self::new_file(source.as_ref(), progress_tracking).map_err(Into::into)
-        }
-    }
-
-    fn new_download(url: &str) -> anyhow::Result<Self> {
-        let resp = reqwest::blocking::get(url)?;
-        let loader = ArchiveSnapshotExtractor::from_reader(resp)?;
-        info!("Streaming snapshot from HTTP");
-        Ok(Self::ArchiveDownload(loader))
-    }
-
-    fn new_file(
-        path: &Path,
-        progress_tracking: Box<dyn ReadProgressTracking>,
-    ) -> solana_snapshot_etl::SnapshotResult<Self> {
-        Ok(if path.is_dir() {
-            info!("Reading unpacked snapshot");
-            Self::Unpacked(UnpackedSnapshotExtractor::open(path, progress_tracking)?)
-        } else {
-            info!("Reading snapshot archive");
-            Self::ArchiveFile(ArchiveSnapshotExtractor::open(path)?)
-        })
-    }
-}
-
-impl SnapshotExtractor for SupportedLoader {
-    fn iter(&mut self) -> AppendVecIterator<'_> {
-        match self {
-            SupportedLoader::Unpacked(loader) => Box::new(loader.iter()),
-            SupportedLoader::ArchiveFile(loader) => Box::new(loader.iter()),
-            SupportedLoader::ArchiveDownload(loader) => Box::new(loader.iter()),
-        }
     }
 }
