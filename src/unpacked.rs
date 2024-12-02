@@ -18,6 +18,7 @@ use crate::utils::{parse_append_vec_name, ReadProgressTracking, SnapshotError, S
 /// Extracts account data from snapshots that were unarchived to a file system.
 pub(crate) struct UnpackedSnapshotExtractor {
     root: PathBuf,
+    slot: u64,
     accounts_db_fields: AccountsDbFields<SerializableAccountStorageEntry>,
 }
 
@@ -54,6 +55,7 @@ impl UnpackedSnapshotExtractor {
 
         let pre_unpack = Instant::now();
         let versioned_bank: DeserializableVersionedBank = deserialize_from(&mut snapshot_file)?;
+        let slot = versioned_bank.slot;
         drop(versioned_bank);
         let versioned_bank_post_time = Instant::now();
 
@@ -68,11 +70,15 @@ impl UnpackedSnapshotExtractor {
             accounts_db_fields_post_time - versioned_bank_post_time
         );
 
-        Ok(UnpackedSnapshotExtractor { root: path.to_path_buf(), accounts_db_fields })
+        Ok(UnpackedSnapshotExtractor { root: path.to_path_buf(), slot, accounts_db_fields })
     }
 
     pub(crate) fn root(&self) -> &Path {
         &self.root
+    }
+
+    pub(crate) const fn slot(&self) -> u64 {
+        self.slot
     }
 
     pub(crate) fn unboxed_iter(&self) -> impl Iterator<Item = SnapshotResult<AppendVec>> + '_ {

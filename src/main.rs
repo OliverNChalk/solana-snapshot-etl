@@ -1,10 +1,10 @@
 use std::io::{IoSliceMut, Read};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
 use clap::{Parser, Subcommand};
 use indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle};
 use rpc::HistoricalRpc;
-use solana_sdk::pubkey::Pubkey;
 use tracing::info;
 use unpacked::UnpackedSnapshotExtractor;
 use utils::{ReadProgressTracking, SnapshotError, SnapshotResult};
@@ -44,8 +44,6 @@ fn main() {
 
     let loader =
         UnpackedSnapshotExtractor::open(&args.source, Box::new(LoadProgressTracking {})).unwrap();
-    // SupportedLoader::new(&args.source, Box::new(LoadProgressTracking
-    // {})).unwrap();
 
     // Setup a multi progress bar & style.
     let multi = MultiProgress::new();
@@ -69,40 +67,23 @@ fn main() {
         Action::Rpc => {
             // Construct the account index.
             let rpc = HistoricalRpc::load(loader, &accounts_bar, &unique_accounts_bar);
-
             info!(keys = rpc.account_index.len(), "Accounts index constructed");
             accounts_bar.finish();
             unique_accounts_bar.finish();
 
-            // Request input from user for which historical account to lookup.
-            let mut request_buf = String::new();
-            loop {
-                request_buf.clear();
+            // Bind the RPC server.
+            let server = rpc.bind();
 
-                println!("\nPlease enter the account you want to load: ");
-                std::io::stdin().read_line(&mut request_buf).unwrap();
+            // Register SIGINT handler.
+            let (sigint_tx, sigint_rx) = mpsc::channel();
+            ctrlc::set_handler(move || {
+                let _ = sigint_tx.send(());
+            })
+            .unwrap();
 
-                // Find account slot.
-                let key = match request_buf.trim().parse::<Pubkey>() {
-                    Ok(key) => key,
-                    Err(err) => {
-                        println!("INVALID KEY: key={request_buf}; err={err}");
-                        continue;
-                    }
-                };
-                let (slot, id) = match rpc.account_index.get(&key) {
-                    Some(slot) => slot,
-                    None => {
-                        println!("MISSING; key={key}");
-                        continue;
-                    }
-                };
-
-                // Lookup the slot.
-                println!("Found; slot={slot}; id={id}");
-                let account = rpc.get_account(&key).unwrap();
-                println!("{account:?}");
-            }
+            // Wait for SIGINT & then shutdown the server.
+            sigint_rx.recv().unwrap();
+            server.close();
         }
     }
 }
