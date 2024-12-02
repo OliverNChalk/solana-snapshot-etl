@@ -1,10 +1,9 @@
 use hashbrown::HashMap;
 
 use indicatif::ProgressBar;
-use solana_sdk::pubkey::Pubkey;
-use solana_snapshot_etl::{
-    append_vec_iter, unpacked::UnpackedSnapshotExtractor, SnapshotExtractor,
-};
+use solana_sdk::{account::Account, pubkey::Pubkey};
+
+use crate::{unpacked::UnpackedSnapshotExtractor, utils::append_vec_iter};
 
 const EXPECTED_ACCOUNTS: usize = 10_000;
 
@@ -15,12 +14,12 @@ pub(crate) struct HistoricalRpc {
 
 impl HistoricalRpc {
     pub(crate) fn load(
-        mut extractor: UnpackedSnapshotExtractor,
+        extractor: UnpackedSnapshotExtractor,
         accounts_bar: &ProgressBar,
         unique_accounts_bar: &ProgressBar,
     ) -> Self {
         let mut account_index = HashMap::with_capacity(EXPECTED_ACCOUNTS);
-        for append_vec in extractor.iter().map(|vec| vec.unwrap()).take(10) {
+        for append_vec in extractor.unboxed_iter().map(|vec| vec.unwrap()).take(10) {
             let slot = append_vec.slot();
             let id = append_vec.id();
 
@@ -49,19 +48,18 @@ impl HistoricalRpc {
         }
     }
 
-    pub(crate) fn get_account(&self, key: &Pubkey) -> Option<u64> {
+    pub(crate) fn get_account(&self, key: &Pubkey) -> Option<Account> {
         let (slot, id) = *self.account_index.get(key)?;
 
         let path = self.extractor.root().join(format!("accounts/{slot}.{id}"));
         let vec = self.extractor.open_append_vec(slot, id, &path).unwrap();
-        let len = append_vec_iter(&vec)
+        let account = append_vec_iter(&vec)
             .find(|account| &account.access().unwrap().meta.pubkey == key)
             .unwrap()
             .access()
             .unwrap()
-            .meta
-            .data_len;
+            .clone_account();
 
-        Some(len)
+        Some(account)
     }
 }

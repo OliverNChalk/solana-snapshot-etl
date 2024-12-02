@@ -40,7 +40,7 @@ use std::io::Read;
 
 const MAX_STREAM_SIZE: u64 = 32 * 1024 * 1024 * 1024;
 
-pub fn deserialize_from<R, T>(reader: R) -> bincode::Result<T>
+pub(crate) fn deserialize_from<R, T>(reader: R) -> bincode::Result<T>
 where
     R: Read,
     T: DeserializeOwned,
@@ -61,67 +61,67 @@ struct UnusedAccounts {
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
-pub struct DeserializableVersionedBank {
-    pub blockhash_queue: BlockhashQueue,
-    pub ancestors: AncestorsForSerialization,
-    pub hash: Hash,
-    pub parent_hash: Hash,
-    pub parent_slot: Slot,
-    pub hard_forks: HardForks,
-    pub transaction_count: u64,
-    pub tick_height: u64,
-    pub signature_count: u64,
-    pub capitalization: u64,
-    pub max_tick_height: u64,
-    pub hashes_per_tick: Option<u64>,
-    pub ticks_per_slot: u64,
-    pub ns_per_slot: u128,
-    pub genesis_creation_time: UnixTimestamp,
-    pub slots_per_year: f64,
-    pub accounts_data_len: u64,
-    pub slot: Slot,
-    pub epoch: Epoch,
-    pub block_height: u64,
-    pub collector_id: Pubkey,
-    pub collector_fees: u64,
-    pub fee_calculator: FeeCalculator,
-    pub fee_rate_governor: FeeRateGovernor,
-    pub collected_rent: u64,
-    pub rent_collector: RentCollector,
-    pub epoch_schedule: EpochSchedule,
-    pub inflation: Inflation,
-    pub stakes: Stakes<Delegation>,
+pub(crate) struct DeserializableVersionedBank {
+    pub(crate) blockhash_queue: BlockhashQueue,
+    pub(crate) ancestors: AncestorsForSerialization,
+    pub(crate) hash: Hash,
+    pub(crate) parent_hash: Hash,
+    pub(crate) parent_slot: Slot,
+    pub(crate) hard_forks: HardForks,
+    pub(crate) transaction_count: u64,
+    pub(crate) tick_height: u64,
+    pub(crate) signature_count: u64,
+    pub(crate) capitalization: u64,
+    pub(crate) max_tick_height: u64,
+    pub(crate) hashes_per_tick: Option<u64>,
+    pub(crate) ticks_per_slot: u64,
+    pub(crate) ns_per_slot: u128,
+    pub(crate) genesis_creation_time: UnixTimestamp,
+    pub(crate) slots_per_year: f64,
+    pub(crate) accounts_data_len: u64,
+    pub(crate) slot: Slot,
+    pub(crate) epoch: Epoch,
+    pub(crate) block_height: u64,
+    pub(crate) collector_id: Pubkey,
+    pub(crate) collector_fees: u64,
+    pub(crate) fee_calculator: FeeCalculator,
+    pub(crate) fee_rate_governor: FeeRateGovernor,
+    pub(crate) collected_rent: u64,
+    pub(crate) rent_collector: RentCollector,
+    pub(crate) epoch_schedule: EpochSchedule,
+    pub(crate) inflation: Inflation,
+    pub(crate) stakes: Stakes<Delegation>,
     #[allow(dead_code)]
     unused_accounts: UnusedAccounts,
-    pub epoch_stakes: HashMap<Epoch, EpochStakes>,
-    pub is_delta: bool,
+    pub(crate) epoch_stakes: HashMap<Epoch, EpochStakes>,
+    pub(crate) is_delta: bool,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, AbiExample)]
-pub struct BankHashInfo {
-    pub hash: Hash,
-    pub snapshot_hash: Hash,
-    pub stats: BankHashStats,
+pub(crate) struct BankHashInfo {
+    pub(crate) hash: Hash,
+    pub(crate) snapshot_hash: Hash,
+    pub(crate) stats: BankHashStats,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct AccountsDbFields<T>(
-    pub HashMap<Slot, Vec<T>>,
-    pub StoredMetaWriteVersion,
-    pub Slot,
-    pub BankHashInfo,
+pub(crate) struct AccountsDbFields<T>(
+    pub(crate) HashMap<Slot, Vec<T>>,
+    pub(crate) StoredMetaWriteVersion,
+    pub(crate) Slot,
+    pub(crate) BankHashInfo,
     /// all slots that were roots within the last epoch
     #[serde(deserialize_with = "default_on_eof")]
-    pub Vec<Slot>,
+    pub(crate) Vec<Slot>,
     /// slots that were roots within the last epoch for which we care about the hash value
     #[serde(deserialize_with = "default_on_eof")]
-    pub Vec<(Slot, Hash)>,
+    pub(crate) Vec<(Slot, Hash)>,
 );
 
-pub type SerializedAppendVecId = usize;
+pub(crate) type SerializedAppendVecId = usize;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize)]
-pub struct SerializableAccountStorageEntry {
-    pub id: SerializedAppendVecId,
-    pub accounts_current_len: usize,
+pub(crate) struct SerializableAccountStorageEntry {
+    pub(crate) id: SerializedAppendVecId,
+    pub(crate) accounts_current_len: usize,
 }

@@ -1,8 +1,11 @@
 use {
     crate::{
-        deserialize_from, parse_append_vec_name, AccountsDbFields, AppendVec, AppendVecIterator,
-        DeserializableVersionedBank, ReadProgressTracking, SerializableAccountStorageEntry,
-        SnapshotError, SnapshotExtractor, SnapshotResult, SNAPSHOTS_DIR,
+        append_vec::AppendVec,
+        solana::{
+            deserialize_from, AccountsDbFields, DeserializableVersionedBank,
+            SerializableAccountStorageEntry,
+        },
+        utils::{parse_append_vec_name, ReadProgressTracking, SnapshotError, SnapshotResult},
     },
     itertools::Itertools,
     solana_runtime::snapshot_utils::SNAPSHOT_STATUS_CACHE_FILENAME,
@@ -17,23 +20,17 @@ use {
 };
 
 /// Extracts account data from snapshots that were unarchived to a file system.
-pub struct UnpackedSnapshotExtractor {
+pub(crate) struct UnpackedSnapshotExtractor {
     root: PathBuf,
     accounts_db_fields: AccountsDbFields<SerializableAccountStorageEntry>,
 }
 
-impl SnapshotExtractor for UnpackedSnapshotExtractor {
-    fn iter(&mut self) -> AppendVecIterator<'_> {
-        Box::new(self.unboxed_iter())
-    }
-}
-
 impl UnpackedSnapshotExtractor {
-    pub fn open(
+    pub(crate) fn open(
         path: &Path,
         progress_tracking: Box<dyn ReadProgressTracking>,
     ) -> SnapshotResult<Self> {
-        let snapshots_dir = path.join(SNAPSHOTS_DIR);
+        let snapshots_dir = path.join("snapshots");
         let status_cache = snapshots_dir.join(SNAPSHOT_STATUS_CACHE_FILENAME);
         if !status_cache.is_file() {
             return Err(SnapshotError::NoStatusCache);
@@ -84,11 +81,11 @@ impl UnpackedSnapshotExtractor {
         })
     }
 
-    pub fn root(&self) -> &Path {
+    pub(crate) fn root(&self) -> &Path {
         &self.root
     }
 
-    pub fn unboxed_iter(&self) -> impl Iterator<Item = SnapshotResult<AppendVec>> + '_ {
+    pub(crate) fn unboxed_iter(&self) -> impl Iterator<Item = SnapshotResult<AppendVec>> + '_ {
         std::iter::once(self.iter_streams())
             .flatten_ok()
             .flatten_ok()
@@ -101,13 +98,19 @@ impl UnpackedSnapshotExtractor {
             let name = file.file_name();
 
             let (slot, version) = parse_append_vec_name(&name).unwrap();
+
             Ok(self
                 .open_append_vec(slot, version, &accounts_dir.join(&name))
                 .unwrap())
         }))
     }
 
-    pub fn open_append_vec(&self, slot: u64, id: u64, path: &Path) -> SnapshotResult<AppendVec> {
+    pub(crate) fn open_append_vec(
+        &self,
+        slot: u64,
+        id: u64,
+        path: &Path,
+    ) -> SnapshotResult<AppendVec> {
         let known_vecs = self
             .accounts_db_fields
             .0

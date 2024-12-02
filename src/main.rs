@@ -3,17 +3,20 @@ use {
     indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle},
     rpc::HistoricalRpc,
     solana_sdk::pubkey::Pubkey,
-    solana_snapshot_etl::{
-        unpacked::UnpackedSnapshotExtractor, ReadProgressTracking, SnapshotError, SnapshotResult,
-    },
     std::{
         io::{IoSliceMut, Read},
         path::{Path, PathBuf},
     },
     tracing::info,
+    unpacked::UnpackedSnapshotExtractor,
+    utils::{ReadProgressTracking, SnapshotError, SnapshotResult},
 };
 
+mod append_vec;
 mod rpc;
+mod solana;
+mod unpacked;
+mod utils;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -93,9 +96,9 @@ fn main() {
                 };
 
                 // Lookup the slot.
-                print!("Found; slot={slot}; id={id}; ");
-                let len = rpc.get_account(&key).unwrap();
-                println!("len={len}")
+                println!("Found; slot={slot}; id={id}");
+                let account = rpc.get_account(&key).unwrap();
+                println!("{account:?}");
             }
         }
     }
