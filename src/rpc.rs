@@ -8,7 +8,7 @@ use jsonrpc_derive::rpc;
 use jsonrpc_http_server::{
     hyper, AccessControlAllowOrigin, DomainsValidation, Server, ServerBuilder,
 };
-use solana_account_decoder::{UiAccount, UiAccountEncoding};
+use solana_account_decoder::{encode_ui_account, UiAccount, UiAccountEncoding};
 use solana_rpc::rpc::verify_pubkey;
 use solana_rpc_client_api::config::RpcAccountInfoConfig;
 use solana_rpc_client_api::response::{Response as RpcResponse, RpcResponseContext};
@@ -147,7 +147,7 @@ impl AccountsRpc for AccountsRpcImpl {
 
         // Load the account.
         let account = meta.get_account(&pubkey).map(|account| {
-            UiAccount::encode(&pubkey, &account, UiAccountEncoding::Base64, None, None)
+            encode_ui_account(&pubkey, &account, UiAccountEncoding::Base64, None, None)
         });
 
         Ok(RpcResponse { context: RpcResponseContext::new(slot), value: account })

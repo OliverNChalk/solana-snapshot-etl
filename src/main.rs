@@ -9,6 +9,8 @@ use tracing::info;
 use unpacked::UnpackedSnapshotExtractor;
 use utils::{ReadProgressTracking, SnapshotError, SnapshotResult};
 
+/// Custom implementation of [`solana_accounts_db::append_vec::AppendVec`] with
+/// changed visibility & helper methods.
 mod append_vec;
 mod rpc;
 mod solana;
