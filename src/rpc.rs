@@ -1,9 +1,10 @@
 use hashbrown::HashMap;
-
 use indicatif::ProgressBar;
-use solana_sdk::{account::Account, pubkey::Pubkey};
+use solana_sdk::account::Account;
+use solana_sdk::pubkey::Pubkey;
 
-use crate::{unpacked::UnpackedSnapshotExtractor, utils::append_vec_iter};
+use crate::unpacked::UnpackedSnapshotExtractor;
+use crate::utils::append_vec_iter;
 
 const EXPECTED_ACCOUNTS: usize = 10_000;
 
@@ -42,10 +43,7 @@ impl HistoricalRpc {
             }
         }
 
-        HistoricalRpc {
-            extractor,
-            account_index,
-        }
+        HistoricalRpc { extractor, account_index }
     }
 
     pub(crate) fn get_account(&self, key: &Pubkey) -> Option<Account> {

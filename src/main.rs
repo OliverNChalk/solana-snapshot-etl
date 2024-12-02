@@ -1,16 +1,13 @@
-use {
-    clap::{Parser, Subcommand},
-    indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle},
-    rpc::HistoricalRpc,
-    solana_sdk::pubkey::Pubkey,
-    std::{
-        io::{IoSliceMut, Read},
-        path::{Path, PathBuf},
-    },
-    tracing::info,
-    unpacked::UnpackedSnapshotExtractor,
-    utils::{ReadProgressTracking, SnapshotError, SnapshotResult},
-};
+use std::io::{IoSliceMut, Read};
+use std::path::{Path, PathBuf};
+
+use clap::{Parser, Subcommand};
+use indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle};
+use rpc::HistoricalRpc;
+use solana_sdk::pubkey::Pubkey;
+use tracing::info;
+use unpacked::UnpackedSnapshotExtractor;
+use utils::{ReadProgressTracking, SnapshotError, SnapshotResult};
 
 mod append_vec;
 mod rpc;
@@ -25,7 +22,8 @@ struct Args {
     #[clap(long)]
     source: PathBuf,
 
-    /// Number of threads used to process snapshot, by default number of CPUs would be used.
+    /// Number of threads used to process snapshot, by default number of CPUs
+    /// would be used.
     #[clap(long)]
     num_threads: Option<usize>,
 
@@ -46,11 +44,16 @@ fn main() {
 
     let loader =
         UnpackedSnapshotExtractor::open(&args.source, Box::new(LoadProgressTracking {})).unwrap();
-    // SupportedLoader::new(&args.source, Box::new(LoadProgressTracking {})).unwrap();
+    // SupportedLoader::new(&args.source, Box::new(LoadProgressTracking
+    // {})).unwrap();
 
     // Setup a multi progress bar & style.
     let multi = MultiProgress::new();
-    let style = ProgressStyle::with_template("{prefix:>15.bold.dim} {spinner:.green} rate={per_sec} processed={human_pos} {elapsed_precise:.cyan}").unwrap();
+    let style = ProgressStyle::with_template(
+        "{prefix:>15.bold.dim} {spinner:.green} rate={per_sec} processed={human_pos} \
+         {elapsed_precise:.cyan}",
+    )
+    .unwrap();
 
     // Setup accounts processed bar.
     let accounts_bar = multi.add(ProgressBar::new_spinner());
@@ -115,16 +118,14 @@ impl ReadProgressTracking for LoadProgressTracking {
     ) -> SnapshotResult<Box<dyn Read>> {
         let progress_bar = ProgressBar::new(file_len).with_style(
             ProgressStyle::with_template(
-                "{prefix:>15.bold.dim} {spinner:.green} [{bar:.cyan/blue}] {bytes}/{total_bytes} ({percent}%)",
+                "{prefix:>15.bold.dim} {spinner:.green} [{bar:.cyan/blue}] {bytes}/{total_bytes} \
+                 ({percent}%)",
             )
             .map_err(|error| SnapshotError::ReadProgressTracking(error.to_string()))?
             .progress_chars("#>-"),
         );
         progress_bar.set_prefix("manifest");
-        Ok(Box::new(LoadProgressTracker {
-            rd: progress_bar.wrap_read(rd),
-            progress_bar,
-        }))
+        Ok(Box::new(LoadProgressTracker { rd: progress_bar.wrap_read(rd), progress_bar }))
     }
 }
 

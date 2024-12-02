@@ -1,8 +1,11 @@
-use {
-    crate::append_vec::{AppendVec, StoredAccountMeta},
-    std::{ffi::OsStr, io::Read, path::Path, str::FromStr},
-    thiserror::Error,
-};
+use std::ffi::OsStr;
+use std::io::Read;
+use std::path::Path;
+use std::str::FromStr;
+
+use thiserror::Error;
+
+use crate::append_vec::{AppendVec, StoredAccountMeta};
 
 #[derive(Error, Debug)]
 pub(crate) enum SnapshotError {

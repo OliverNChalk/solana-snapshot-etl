@@ -1,23 +1,19 @@
-use {
-    crate::{
-        append_vec::AppendVec,
-        solana::{
-            deserialize_from, AccountsDbFields, DeserializableVersionedBank,
-            SerializableAccountStorageEntry,
-        },
-        utils::{parse_append_vec_name, ReadProgressTracking, SnapshotError, SnapshotResult},
-    },
-    itertools::Itertools,
-    solana_runtime::snapshot_utils::SNAPSHOT_STATUS_CACHE_FILENAME,
-    std::{
-        fs::OpenOptions,
-        io::BufReader,
-        path::{Path, PathBuf},
-        str::FromStr,
-        time::Instant,
-    },
-    tracing::info,
+use std::fs::OpenOptions;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::time::Instant;
+
+use itertools::Itertools;
+use solana_runtime::snapshot_utils::SNAPSHOT_STATUS_CACHE_FILENAME;
+use tracing::info;
+
+use crate::append_vec::AppendVec;
+use crate::solana::{
+    deserialize_from, AccountsDbFields, DeserializableVersionedBank,
+    SerializableAccountStorageEntry,
 };
+use crate::utils::{parse_append_vec_name, ReadProgressTracking, SnapshotError, SnapshotResult};
 
 /// Extracts account data from snapshots that were unarchived to a file system.
 pub(crate) struct UnpackedSnapshotExtractor {
@@ -66,19 +62,13 @@ impl UnpackedSnapshotExtractor {
         let accounts_db_fields_post_time = Instant::now();
         drop(snapshot_file);
 
-        info!(
-            "Read bank fields in {:?}",
-            versioned_bank_post_time - pre_unpack
-        );
+        info!("Read bank fields in {:?}", versioned_bank_post_time - pre_unpack);
         info!(
             "Read accounts DB fields in {:?}",
             accounts_db_fields_post_time - versioned_bank_post_time
         );
 
-        Ok(UnpackedSnapshotExtractor {
-            root: path.to_path_buf(),
-            accounts_db_fields,
-        })
+        Ok(UnpackedSnapshotExtractor { root: path.to_path_buf(), accounts_db_fields })
     }
 
     pub(crate) fn root(&self) -> &Path {
@@ -123,11 +113,6 @@ impl UnpackedSnapshotExtractor {
             Some(v) => v,
         };
 
-        Ok(AppendVec::new_from_file(
-            path,
-            known_vec.accounts_current_len,
-            slot,
-            id,
-        )?)
+        Ok(AppendVec::new_from_file(path, known_vec.accounts_current_len, slot, id)?)
     }
 }

@@ -14,6 +14,9 @@
 
 // This file contains code vendored from https://github.com/solana-labs/solana
 
+use std::collections::{HashMap, HashSet};
+use std::io::Read;
+
 use bincode::Options;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -35,8 +38,6 @@ use solana_sdk::inflation::Inflation;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::slot_history::Slot;
 use solana_sdk::stake::state::Delegation;
-use std::collections::{HashMap, HashSet};
-use std::io::Read;
 
 const MAX_STREAM_SIZE: u64 = 32 * 1024 * 1024 * 1024;
 
@@ -113,7 +114,8 @@ pub(crate) struct AccountsDbFields<T>(
     /// all slots that were roots within the last epoch
     #[serde(deserialize_with = "default_on_eof")]
     pub(crate) Vec<Slot>,
-    /// slots that were roots within the last epoch for which we care about the hash value
+    /// slots that were roots within the last epoch for which we care about the
+    /// hash value
     #[serde(deserialize_with = "default_on_eof")]
     pub(crate) Vec<(Slot, Hash)>,
 );
