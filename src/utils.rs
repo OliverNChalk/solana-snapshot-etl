@@ -3,27 +3,7 @@ use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
 
-use thiserror::Error;
-
 use crate::append_vec::{AppendVec, StoredAccountMeta};
-
-#[derive(Error, Debug)]
-pub(crate) enum SnapshotError {
-    #[error("{0}")]
-    IOError(#[from] std::io::Error),
-    #[error("Failed to deserialize: {0}")]
-    BincodeError(#[from] bincode::Error),
-    #[error("Missing status cache")]
-    NoStatusCache,
-    #[error("No snapshot manifest file found")]
-    NoSnapshotManifest,
-    #[error("Unexpected AppendVec")]
-    UnexpectedAppendVec,
-    #[error("Failed to create read progress tracking: {0}")]
-    ReadProgressTracking(String),
-}
-
-pub(crate) type SnapshotResult<T> = Result<T, SnapshotError>;
 
 pub(crate) fn parse_append_vec_name(name: &OsStr) -> Option<(u64, u64)> {
     let name = name.to_str()?;
@@ -78,5 +58,5 @@ pub(crate) trait ReadProgressTracking {
         path: &Path,
         rd: Box<dyn Read>,
         file_len: u64,
-    ) -> SnapshotResult<Box<dyn Read>>;
+    ) -> Box<dyn Read>;
 }

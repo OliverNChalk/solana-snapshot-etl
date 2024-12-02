@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Instant;
 
-use itertools::Itertools;
 use solana_runtime::snapshot_utils::SNAPSHOT_STATUS_CACHE_FILENAME;
 use tracing::info;
 
@@ -13,7 +12,7 @@ use crate::solana::{
     deserialize_from, AccountsDbFields, DeserializableVersionedBank,
     SerializableAccountStorageEntry,
 };
-use crate::utils::{parse_append_vec_name, ReadProgressTracking, SnapshotError, SnapshotResult};
+use crate::utils::{parse_append_vec_name, ReadProgressTracking};
 
 /// Extracts account data from snapshots that were unarchived to a file system.
 pub(crate) struct UnpackedSnapshotExtractor {
@@ -23,44 +22,46 @@ pub(crate) struct UnpackedSnapshotExtractor {
 }
 
 impl UnpackedSnapshotExtractor {
-    pub(crate) fn open(
-        path: &Path,
-        progress_tracking: Box<dyn ReadProgressTracking>,
-    ) -> SnapshotResult<Self> {
+    pub(crate) fn open(path: &Path, progress_tracking: Box<dyn ReadProgressTracking>) -> Self {
         let snapshots_dir = path.join("snapshots");
         let status_cache = snapshots_dir.join(SNAPSHOT_STATUS_CACHE_FILENAME);
-        if !status_cache.is_file() {
-            return Err(SnapshotError::NoStatusCache);
-        }
+        assert!(
+            status_cache.is_file(),
+            "Status cache is not a file; status_cache={status_cache:?}"
+        );
 
-        let snapshot_files = snapshots_dir.read_dir()?;
+        let snapshot_files = snapshots_dir.read_dir().unwrap();
 
         let snapshot_file_path = snapshot_files
             .take(10)
             .filter_map(|entry| entry.ok())
             .find(|entry| u64::from_str(&entry.file_name().to_string_lossy()).is_ok())
             .map(|entry| entry.path().join(entry.file_name()))
-            .ok_or(SnapshotError::NoSnapshotManifest)?;
+            .unwrap();
 
         info!("Opening snapshot manifest: {:?}", snapshot_file_path);
-        let snapshot_file = OpenOptions::new().read(true).open(&snapshot_file_path)?;
-        let snapshot_file_len = snapshot_file.metadata()?.len();
+        let snapshot_file = OpenOptions::new()
+            .read(true)
+            .open(&snapshot_file_path)
+            .unwrap();
+        let snapshot_file_len = snapshot_file.metadata().unwrap().len();
 
         let snapshot_file = progress_tracking.new_read_progress_tracker(
             &snapshot_file_path,
             Box::new(snapshot_file),
             snapshot_file_len,
-        )?;
+        );
         let mut snapshot_file = BufReader::new(snapshot_file);
 
         let pre_unpack = Instant::now();
-        let versioned_bank: DeserializableVersionedBank = deserialize_from(&mut snapshot_file)?;
+        let versioned_bank: DeserializableVersionedBank =
+            deserialize_from(&mut snapshot_file).unwrap();
         let slot = versioned_bank.slot;
         drop(versioned_bank);
         let versioned_bank_post_time = Instant::now();
 
         let accounts_db_fields: AccountsDbFields<SerializableAccountStorageEntry> =
-            deserialize_from(&mut snapshot_file)?;
+            deserialize_from(&mut snapshot_file).unwrap();
         let accounts_db_fields_post_time = Instant::now();
         drop(snapshot_file);
 
@@ -70,7 +71,7 @@ impl UnpackedSnapshotExtractor {
             accounts_db_fields_post_time - versioned_bank_post_time
         );
 
-        Ok(UnpackedSnapshotExtractor { root: path.to_path_buf(), slot, accounts_db_fields })
+        UnpackedSnapshotExtractor { root: path.to_path_buf(), slot, accounts_db_fields }
     }
 
     pub(crate) fn root(&self) -> &Path {
@@ -81,32 +82,23 @@ impl UnpackedSnapshotExtractor {
         self.slot
     }
 
-    pub(crate) fn unboxed_iter(&self) -> impl Iterator<Item = SnapshotResult<AppendVec>> + '_ {
-        std::iter::once(self.iter_streams())
-            .flatten_ok()
-            .flatten_ok()
+    pub(crate) fn unboxed_iter(&self) -> impl Iterator<Item = AppendVec> + '_ {
+        self.iter_streams()
     }
 
-    fn iter_streams(&self) -> SnapshotResult<impl Iterator<Item = SnapshotResult<AppendVec>> + '_> {
+    fn iter_streams(&self) -> impl Iterator<Item = AppendVec> + '_ {
         let accounts_dir = self.root.join("accounts");
-        Ok(accounts_dir.read_dir().unwrap().map(move |file| {
+        accounts_dir.read_dir().unwrap().map(move |file| {
             let file = file.unwrap();
             let name = file.file_name();
 
             let (slot, version) = parse_append_vec_name(&name).unwrap();
 
-            Ok(self
-                .open_append_vec(slot, version, &accounts_dir.join(&name))
-                .unwrap())
-        }))
+            self.open_append_vec(slot, version, &accounts_dir.join(&name))
+        })
     }
 
-    pub(crate) fn open_append_vec(
-        &self,
-        slot: u64,
-        id: u64,
-        path: &Path,
-    ) -> SnapshotResult<AppendVec> {
+    pub(crate) fn open_append_vec(&self, slot: u64, id: u64, path: &Path) -> AppendVec {
         let known_vecs = self
             .accounts_db_fields
             .0
@@ -115,10 +107,10 @@ impl UnpackedSnapshotExtractor {
             .unwrap_or(&[]);
         let known_vec = known_vecs.iter().find(|entry| entry.id == (id as usize));
         let known_vec = match known_vec {
-            None => return Err(SnapshotError::UnexpectedAppendVec),
+            None => panic!("Unknown vec"),
             Some(v) => v,
         };
 
-        Ok(AppendVec::new_from_file(path, known_vec.accounts_current_len, slot, id)?)
+        AppendVec::new_from_file(path, known_vec.accounts_current_len, slot, id).unwrap()
     }
 }

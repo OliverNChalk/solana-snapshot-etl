@@ -34,7 +34,7 @@ impl HistoricalRpc {
         unique_accounts_bar: &ProgressBar,
     ) -> Self {
         let mut account_index = HashMap::with_capacity(EXPECTED_ACCOUNTS);
-        for append_vec in extractor.unboxed_iter().map(|vec| vec.unwrap()).take(10) {
+        for append_vec in extractor.unboxed_iter().take(10) {
             let slot = append_vec.slot();
             let id = append_vec.id();
 
@@ -68,7 +68,7 @@ impl HistoricalRpc {
         let (slot, id) = *self.account_index.get(key)?;
 
         let path = self.extractor.root().join(format!("accounts/{slot}.{id}"));
-        let vec = self.extractor.open_append_vec(slot, id, &path).unwrap();
+        let vec = self.extractor.open_append_vec(slot, id, &path);
         let account = append_vec_iter(&vec)
             .find(|account| &account.access().unwrap().meta.pubkey == key)
             .unwrap()

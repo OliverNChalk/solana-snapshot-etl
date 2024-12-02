@@ -7,7 +7,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle};
 use rpc::HistoricalRpc;
 use tracing::info;
 use unpacked::UnpackedSnapshotExtractor;
-use utils::{ReadProgressTracking, SnapshotError, SnapshotResult};
+use utils::ReadProgressTracking;
 
 /// Custom implementation of [`solana_accounts_db::append_vec::AppendVec`] with
 /// changed visibility & helper methods.
@@ -44,8 +44,7 @@ fn main() {
 
     let args = Args::parse();
 
-    let loader =
-        UnpackedSnapshotExtractor::open(&args.source, Box::new(LoadProgressTracking {})).unwrap();
+    let loader = UnpackedSnapshotExtractor::open(&args.source, Box::new(LoadProgressTracking {}));
 
     // Setup a multi progress bar & style.
     let multi = MultiProgress::new();
@@ -98,17 +97,18 @@ impl ReadProgressTracking for LoadProgressTracking {
         _path: &Path,
         rd: Box<dyn Read>,
         file_len: u64,
-    ) -> SnapshotResult<Box<dyn Read>> {
+    ) -> Box<dyn Read> {
         let progress_bar = ProgressBar::new(file_len).with_style(
             ProgressStyle::with_template(
                 "{prefix:>15.bold.dim} {spinner:.green} [{bar:.cyan/blue}] {bytes}/{total_bytes} \
                  ({percent}%)",
             )
-            .map_err(|error| SnapshotError::ReadProgressTracking(error.to_string()))?
+            .unwrap()
             .progress_chars("#>-"),
         );
         progress_bar.set_prefix("manifest");
-        Ok(Box::new(LoadProgressTracker { rd: progress_bar.wrap_read(rd), progress_bar }))
+
+        Box::new(LoadProgressTracker { rd: progress_bar.wrap_read(rd), progress_bar })
     }
 }
 
