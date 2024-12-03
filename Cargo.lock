@@ -4729,7 +4729,7 @@ dependencies = [
  "spl-token-group-interface",
  "spl-token-metadata-interface",
  "thiserror 1.0.69",
- "zstd 0.13.2",
+ "zstd",
 ]
 
 [[package]]
@@ -4745,7 +4745,7 @@ dependencies = [
  "serde_json",
  "solana-account",
  "solana-pubkey",
- "zstd 0.13.2",
+ "zstd",
 ]
 
 [[package]]
@@ -6141,7 +6141,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror 1.0.69",
- "zstd 0.13.2",
+ "zstd",
 ]
 
 [[package]]
@@ -6374,19 +6374,15 @@ dependencies = [
 name = "solana-snapshot-etl"
 version = "0.5.0"
 dependencies = [
- "anyhow",
  "bincode",
  "clap 4.4.4",
  "ctrlc",
  "hashbrown 0.15.2",
  "indicatif",
- "itertools 0.10.5",
  "jsonrpc-core",
- "jsonrpc-core-client",
  "jsonrpc-derive",
  "jsonrpc-http-server",
  "memmap2",
- "reqwest",
  "serde",
  "solana-account-decoder",
  "solana-accounts-db",
@@ -6395,11 +6391,8 @@ dependencies = [
  "solana-rpc-client-api",
  "solana-runtime",
  "solana-sdk",
- "tar",
- "thiserror 1.0.69",
  "toolbox",
  "tracing",
- "zstd 0.11.2+zstd.1.5.2",
 ]
 
 [[package]]
@@ -6460,7 +6453,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tonic",
- "zstd 0.13.2",
+ "zstd",
 ]
 
 [[package]]
@@ -8516,30 +8509,11 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.11.2+zstd.1.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20cc960326ece64f010d2d2107537f26dc589a6573a316bd5b1dba685fa5fde4"
-dependencies = [
- "zstd-safe 5.0.2+zstd.1.5.2",
-]
-
-[[package]]
-name = "zstd"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcf2b778a664581e31e389454a7072dab1647606d44f7feea22cd5abb9c9f3f9"
 dependencies = [
- "zstd-safe 7.2.1",
-]
-
-[[package]]
-name = "zstd-safe"
-version = "5.0.2+zstd.1.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d2a5585e04f9eea4b2a3d1eca508c4dee9592a89ef6f450c11719da0726f4db"
-dependencies = [
- "libc",
- "zstd-sys",
+ "zstd-safe",
 ]
 
 [[package]]
