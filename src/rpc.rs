@@ -3,18 +3,23 @@ use std::sync::Arc;
 
 use hashbrown::HashMap;
 use indicatif::ProgressBar;
-use jsonrpc_core::{Error as JsonRpcError, MetaIoHandler, Result};
+use jsonrpc_core::{BoxFuture, Error as JsonRpcError, MetaIoHandler, Result};
 use jsonrpc_derive::rpc;
 use jsonrpc_http_server::{
     hyper, AccessControlAllowOrigin, DomainsValidation, Server, ServerBuilder,
 };
 use solana_account_decoder::{encode_ui_account, UiAccount, UiAccountEncoding};
 use solana_rpc::rpc::verify_pubkey;
-use solana_rpc_client_api::config::RpcAccountInfoConfig;
+use solana_rpc_client::nonblocking::rpc_client::RpcClient;
+use solana_rpc_client_api::config::{
+    RpcAccountInfoConfig, RpcEncodingConfigWrapper, RpcTransactionConfig,
+};
 use solana_rpc_client_api::response::{Response as RpcResponse, RpcResponseContext};
 use solana_sdk::account::Account;
 use solana_sdk::pubkey::Pubkey;
-use tracing::debug;
+use solana_sdk::signature::Signature;
+use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
+use tracing::{debug, info};
 
 use crate::unpacked::UnpackedSnapshotExtractor;
 use crate::utils::append_vec_iter;
@@ -24,7 +29,8 @@ const LISTEN_ADDRESS: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UN
 
 pub(crate) struct HistoricalRpc {
     extractor: UnpackedSnapshotExtractor,
-    pub(crate) account_index: HashMap<Pubkey, (u64, u64)>,
+    account_index: HashMap<Pubkey, (u64, u64)>,
+    transaction_rpc: Option<RpcClient>,
 }
 
 impl HistoricalRpc {
@@ -32,9 +38,12 @@ impl HistoricalRpc {
         extractor: UnpackedSnapshotExtractor,
         accounts_bar: &ProgressBar,
         unique_accounts_bar: &ProgressBar,
+        transaction_rpc: Option<String>,
     ) -> Self {
+        let transaction_rpc = transaction_rpc.map(|url| RpcClient::new(url));
+
         let mut account_index = HashMap::with_capacity(EXPECTED_ACCOUNTS);
-        for append_vec in extractor.unboxed_iter() {
+        for append_vec in extractor.unboxed_iter().take(10) {
             let slot = append_vec.slot();
             let id = append_vec.id();
 
@@ -57,7 +66,11 @@ impl HistoricalRpc {
             }
         }
 
-        HistoricalRpc { extractor, account_index }
+        info!(keys = account_index.len(), "Accounts index constructed");
+        accounts_bar.finish();
+        unique_accounts_bar.finish();
+
+        HistoricalRpc { extractor, account_index, transaction_rpc }
     }
 
     pub(crate) const fn slot(&self) -> u64 {
@@ -77,6 +90,36 @@ impl HistoricalRpc {
             .clone_account();
 
         Some(account)
+    }
+
+    async fn get_transaction(
+        &self,
+        signature: Signature,
+        config: Option<RpcEncodingConfigWrapper<RpcTransactionConfig>>,
+    ) -> Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
+        let Some(rpc) = &self.transaction_rpc else {
+            return Err(JsonRpcError::invalid_params(format!(
+                "This historical RPC does not have a provided transaction_rpc"
+            )));
+        };
+
+        let config = config
+            .and_then(|config| match config {
+                RpcEncodingConfigWrapper::Current(config) => config,
+                RpcEncodingConfigWrapper::Deprecated(_) => None,
+            })
+            .unwrap_or_else(|| RpcTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Base64),
+                max_supported_transaction_version: Some(1),
+                commitment: None,
+            });
+
+        rpc.get_transaction_with_config(&signature, config)
+            .await
+            .map(|tx| Some(tx))
+            .map_err(|err| {
+                JsonRpcError::invalid_params(format!("transaction_rpc failed; err={err:?}"))
+            })
     }
 
     pub(crate) fn bind(self) -> Server {
@@ -108,6 +151,14 @@ pub trait AccountsRpc {
         pubkey_str: String,
         config: Option<RpcAccountInfoConfig>,
     ) -> Result<RpcResponse<Option<UiAccount>>>;
+
+    #[rpc(meta, name = "getTransaction")]
+    fn get_transaction(
+        &self,
+        meta: Self::Metadata,
+        signature_str: String,
+        config: Option<RpcEncodingConfigWrapper<RpcTransactionConfig>>,
+    ) -> BoxFuture<Result<Option<EncodedConfirmedTransactionWithStatusMeta>>>;
 }
 
 struct AccountsRpcImpl;
@@ -151,5 +202,20 @@ impl AccountsRpc for AccountsRpcImpl {
         });
 
         Ok(RpcResponse { context: RpcResponseContext::new(slot), value: account })
+    }
+
+    fn get_transaction(
+        &self,
+        meta: Self::Metadata,
+        signature_str: String,
+        config: Option<RpcEncodingConfigWrapper<RpcTransactionConfig>>,
+    ) -> BoxFuture<Result<Option<EncodedConfirmedTransactionWithStatusMeta>>> {
+        let signature = signature_str
+            .parse()
+            .map_err(|e| JsonRpcError::invalid_params(format!("Invalid param: {e:?}")));
+        match signature {
+            Ok(signature) => Box::pin(async move { meta.get_transaction(signature, config).await }),
+            Err(err) => Box::pin(futures::future::err(err)),
+        }
     }
 }

@@ -12,7 +12,6 @@ fn main() {
 
     use clap::Parser;
     use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-    use tracing::info;
 
     use crate::rpc::HistoricalRpc;
     use crate::unpacked::UnpackedSnapshotExtractor;
@@ -43,10 +42,8 @@ fn main() {
     unique_accounts_bar.set_style(style);
 
     // Construct the account index.
-    let rpc = HistoricalRpc::load(loader, &accounts_bar, &unique_accounts_bar);
-    info!(keys = rpc.account_index.len(), "Accounts index constructed");
-    accounts_bar.finish();
-    unique_accounts_bar.finish();
+    let rpc =
+        HistoricalRpc::load(loader, &accounts_bar, &unique_accounts_bar, args.transaction_rpc);
 
     // Bind the RPC server.
     let server = rpc.bind();

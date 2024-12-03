@@ -33,7 +33,6 @@ impl UnpackedSnapshotExtractor {
         let snapshot_files = snapshots_dir.read_dir().unwrap();
 
         let snapshot_file_path = snapshot_files
-            .take(10)
             .filter_map(|entry| entry.ok())
             .find(|entry| u64::from_str(&entry.file_name().to_string_lossy()).is_ok())
             .map(|entry| entry.path().join(entry.file_name()))
