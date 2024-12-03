@@ -1,24 +1,18 @@
 use std::ffi::OsStr;
 use std::io::{IoSliceMut, Read};
 use std::path::Path;
-use std::str::FromStr;
 
 use indicatif::{ProgressBar, ProgressBarIter, ProgressStyle};
 
 use crate::append_vec::{AppendVec, StoredAccountMeta};
 
-pub(crate) fn parse_append_vec_name(name: &OsStr) -> Option<(u64, u64)> {
-    let name = name.to_str()?;
+pub(crate) fn parse_append_vec_name(name: &OsStr) -> (u64, u64) {
+    let name = name.to_str().unwrap();
     let mut parts = name.splitn(2, '.');
-    let slot = u64::from_str(parts.next().unwrap_or(""));
-    let id = u64::from_str(parts.next().unwrap_or(""));
-    match (slot, id) {
-        (Ok(slot), Ok(version)) => Some((slot, version)),
-        _ => {
-            println!("PARSE FAIL: {name:?}");
-            None
-        }
-    }
+    let slot = parts.next().unwrap().parse().unwrap();
+    let id = parts.next().unwrap().parse().unwrap();
+
+    (slot, id)
 }
 
 pub(crate) fn append_vec_iter(

@@ -91,7 +91,7 @@ impl UnpackedSnapshotExtractor {
             let file = file.unwrap();
             let name = file.file_name();
 
-            let (slot, version) = parse_append_vec_name(&name).unwrap();
+            let (slot, version) = parse_append_vec_name(&name);
 
             self.open_append_vec(slot, version, &accounts_dir.join(&name))
         })

@@ -43,16 +43,15 @@ impl HistoricalRpc {
         let transaction_rpc = transaction_rpc.map(|url| RpcClient::new(url));
 
         let mut account_index = HashMap::with_capacity(EXPECTED_ACCOUNTS);
-        for append_vec in extractor.unboxed_iter().take(10) {
+        for append_vec in extractor.unboxed_iter() {
             let slot = append_vec.slot();
             let id = append_vec.id();
 
-            for account in append_vec_iter(&append_vec).take(2) {
+            for account in append_vec_iter(&append_vec) {
                 accounts_bar.inc(1);
 
                 let account = account.access().unwrap();
                 let key = account.meta.pubkey;
-                println!("{key}");
 
                 // Insert the slot if it's newer.
                 let entry = account_index.entry(key).or_insert_with(|| {
