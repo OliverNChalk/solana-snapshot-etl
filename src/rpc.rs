@@ -97,9 +97,9 @@ impl HistoricalRpc {
         config: Option<RpcEncodingConfigWrapper<RpcTransactionConfig>>,
     ) -> Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
         let Some(rpc) = &self.transaction_rpc else {
-            return Err(JsonRpcError::invalid_params(format!(
-                "This historical RPC does not have a provided transaction_rpc"
-            )));
+            return Err(JsonRpcError::invalid_params(
+                "This historical RPC does not have a provided transaction_rpc".to_string(),
+            ));
         };
 
         let config = config
@@ -107,7 +107,7 @@ impl HistoricalRpc {
                 RpcEncodingConfigWrapper::Current(config) => config,
                 RpcEncodingConfigWrapper::Deprecated(_) => None,
             })
-            .unwrap_or_else(|| RpcTransactionConfig {
+            .unwrap_or(RpcTransactionConfig {
                 encoding: Some(UiTransactionEncoding::Base64),
                 max_supported_transaction_version: Some(1),
                 commitment: None,
@@ -115,7 +115,7 @@ impl HistoricalRpc {
 
         rpc.get_transaction_with_config(&signature, config)
             .await
-            .map(|tx| Some(tx))
+            .map(Some)
             .map_err(|err| {
                 JsonRpcError::invalid_params(format!("transaction_rpc failed; err={err:?}"))
             })
