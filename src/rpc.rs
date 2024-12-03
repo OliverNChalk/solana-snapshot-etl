@@ -40,7 +40,7 @@ impl HistoricalRpc {
         unique_accounts_bar: &ProgressBar,
         transaction_rpc: Option<String>,
     ) -> Self {
-        let transaction_rpc = transaction_rpc.map(|url| RpcClient::new(url));
+        let transaction_rpc = transaction_rpc.map(RpcClient::new);
 
         let mut account_index = HashMap::with_capacity(EXPECTED_ACCOUNTS);
         for append_vec in extractor.unboxed_iter() {
