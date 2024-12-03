@@ -19,7 +19,7 @@ use tracing::debug;
 use crate::unpacked::UnpackedSnapshotExtractor;
 use crate::utils::append_vec_iter;
 
-const EXPECTED_ACCOUNTS: usize = 10_000;
+const EXPECTED_ACCOUNTS: usize = 800_000_000;
 const LISTEN_ADDRESS: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 8899));
 
 pub(crate) struct HistoricalRpc {
@@ -34,7 +34,7 @@ impl HistoricalRpc {
         unique_accounts_bar: &ProgressBar,
     ) -> Self {
         let mut account_index = HashMap::with_capacity(EXPECTED_ACCOUNTS);
-        for append_vec in extractor.unboxed_iter().take(10) {
+        for append_vec in extractor.unboxed_iter() {
             let slot = append_vec.slot();
             let id = append_vec.id();
 

@@ -1,48 +1,26 @@
-use std::io::{IoSliceMut, Read};
-use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-
-use clap::{Parser, Subcommand};
-use indicatif::{MultiProgress, ProgressBar, ProgressBarIter, ProgressStyle};
-use rpc::HistoricalRpc;
-use tracing::info;
-use unpacked::UnpackedSnapshotExtractor;
-use utils::ReadProgressTracking;
-
 /// Custom implementation of [`solana_accounts_db::append_vec::AppendVec`] with
 /// changed visibility & helper methods.
 mod append_vec;
+mod args;
 mod rpc;
 mod solana;
 mod unpacked;
 mod utils;
 
-#[derive(Debug, Parser)]
-#[clap(author, version, about)]
-struct Args {
-    /// Snapshot source (unpacked snapshot).
-    #[clap(long)]
-    source: PathBuf,
-
-    /// Number of threads used to process snapshot, by default number of CPUs
-    /// would be used.
-    #[clap(long)]
-    num_threads: Option<usize>,
-
-    #[command(subcommand)]
-    action: Action,
-}
-
-#[derive(Debug, Subcommand)]
-enum Action {
-    /// Index all accounts and serve an RPC.
-    Rpc,
-}
-
 fn main() {
+    use std::sync::mpsc;
+
+    use clap::Parser;
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+    use tracing::info;
+
+    use crate::rpc::HistoricalRpc;
+    use crate::unpacked::UnpackedSnapshotExtractor;
+    use crate::utils::LoadProgressTracking;
+
     let _ = toolbox::tracing::setup_tracing("solana-snapshot-etl", None);
 
-    let args = Args::parse();
+    let args = args::Args::parse();
 
     let loader = UnpackedSnapshotExtractor::open(&args.source, Box::new(LoadProgressTracking {}));
 
@@ -64,79 +42,23 @@ fn main() {
     unique_accounts_bar.set_prefix("unique accounts");
     unique_accounts_bar.set_style(style);
 
-    match args.action {
-        Action::Rpc => {
-            // Construct the account index.
-            let rpc = HistoricalRpc::load(loader, &accounts_bar, &unique_accounts_bar);
-            info!(keys = rpc.account_index.len(), "Accounts index constructed");
-            accounts_bar.finish();
-            unique_accounts_bar.finish();
+    // Construct the account index.
+    let rpc = HistoricalRpc::load(loader, &accounts_bar, &unique_accounts_bar);
+    info!(keys = rpc.account_index.len(), "Accounts index constructed");
+    accounts_bar.finish();
+    unique_accounts_bar.finish();
 
-            // Bind the RPC server.
-            let server = rpc.bind();
+    // Bind the RPC server.
+    let server = rpc.bind();
 
-            // Register SIGINT handler.
-            let (sigint_tx, sigint_rx) = mpsc::channel();
-            ctrlc::set_handler(move || {
-                let _ = sigint_tx.send(());
-            })
-            .unwrap();
+    // Register SIGINT handler.
+    let (sigint_tx, sigint_rx) = mpsc::channel();
+    ctrlc::set_handler(move || {
+        let _ = sigint_tx.send(());
+    })
+    .unwrap();
 
-            // Wait for SIGINT & then shutdown the server.
-            sigint_rx.recv().unwrap();
-            server.close();
-        }
-    }
-}
-
-struct LoadProgressTracking {}
-
-impl ReadProgressTracking for LoadProgressTracking {
-    fn new_read_progress_tracker(
-        &self,
-        _path: &Path,
-        rd: Box<dyn Read>,
-        file_len: u64,
-    ) -> Box<dyn Read> {
-        let progress_bar = ProgressBar::new(file_len).with_style(
-            ProgressStyle::with_template(
-                "{prefix:>15.bold.dim} {spinner:.green} [{bar:.cyan/blue}] {bytes}/{total_bytes} \
-                 ({percent}%)",
-            )
-            .unwrap()
-            .progress_chars("#>-"),
-        );
-        progress_bar.set_prefix("manifest");
-
-        Box::new(LoadProgressTracker { rd: progress_bar.wrap_read(rd), progress_bar })
-    }
-}
-
-struct LoadProgressTracker {
-    progress_bar: ProgressBar,
-    rd: ProgressBarIter<Box<dyn Read>>,
-}
-
-impl Drop for LoadProgressTracker {
-    fn drop(&mut self) {
-        self.progress_bar.finish()
-    }
-}
-
-impl Read for LoadProgressTracker {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.rd.read(buf)
-    }
-
-    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
-        self.rd.read_vectored(bufs)
-    }
-
-    fn read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
-        self.rd.read_to_string(buf)
-    }
-
-    fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
-        self.rd.read_exact(buf)
-    }
+    // Wait for SIGINT & then shutdown the server.
+    sigint_rx.recv().unwrap();
+    server.close();
 }
